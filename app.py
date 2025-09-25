@@ -1,3 +1,4 @@
+from document_processor import DocumentProcessor
 
 import streamlit as st
 import os
