@@ -177,4 +177,4 @@ if uploaded:
     if st.button("Generate Documentation"):
         path = parse_zip(uploaded.read(), screenshots)
         with open(path,"rb") as f:
-            st.download_button("Download DOCX", f, file_name=f"{pj.get('name')}.docx")
+            st.download_button("Download DOCX", f, file_name="pipline_doc.docx")
