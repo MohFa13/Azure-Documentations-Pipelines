@@ -1,4 +1,4 @@
-from QwenDocGenie.document_processor import fix_reference_names, extract_sources_from_docx
+from document_processor import fix_reference_names, extract_sources_from_docx
 
 import streamlit as st
 import os
