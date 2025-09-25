@@ -1,10 +1,8 @@
-from document_processor import DocumentProcessor
 
 import streamlit as st
 import os
 import tempfile
 import zipfile
-from io import BytesIO
 from pathlib import Path
 import pandas as pd
 from llm_handler_simple import SimpleLLMHandler as QwenLLMHandler
@@ -195,176 +193,136 @@ def generate_documentation(analysis_results, uploaded_screenshots=None):
         return None
 
 def main():
-    st.title("🔧 Azure Data Factory Pipeline Analyzer")
-    st.markdown("Upload a ZIP file containing Azure Data Factory pipeline JSON files, or individual files")
+    """Main application function"""
+    st.title("📄 DocuFillGenie")
+    st.markdown("### AI-Powered Azure Synapse Pipeline Documentation Generator")
     
-    # Initialize the DocumentProcessor
-    try:
-        processor = DocumentProcessor()
-        st.success("✅ DocumentProcessor initialized successfully!")
-    except Exception as e:
-        st.error(f"❌ Failed to initialize DocumentProcessor: {e}")
+    # Initialize components
+    if not initialize_components():
         return
     
-    # File uploader
-    uploaded_file = st.file_uploader(
-        "Choose a file", 
-        type=['zip', 'json', 'pdf', 'docx', 'txt'],
-        help="Upload a ZIP file containing pipeline folders with JSON files, a single JSON file, or other document types"
-    )
+    # Sidebar for file upload
+    with st.sidebar:
+        st.header("📁 File Upload")
+        uploaded_files = st.file_uploader(
+            "Upload documents or zip files",
+            type=['zip', 'docx', 'doc', 'txt', 'pdf', 'xlsx', 'xls', 'csv', 'json'],
+            accept_multiple_files=True,
+            help="Upload zip files containing pipeline documentation or individual documents"
+        )
+        
+        st.divider()
+        
+        # Optional screenshot upload section
+        st.subheader("📷 Data Flow Screenshots (Optional)")
+        st.markdown("Upload screenshots of your data flow diagrams to include in the documentation")
+        
+        uploaded_screenshots = st.file_uploader(
+            "Upload dataflow screenshots",
+            type=['png', 'jpg', 'jpeg', 'gif', 'bmp'],
+            accept_multiple_files=True,
+            help="Optional: Upload screenshots of your data flow diagrams"
+        )
+        
+        if uploaded_screenshots:
+            st.write(f"📷 {len(uploaded_screenshots)} screenshot(s) uploaded")
+            for screenshot in uploaded_screenshots:
+                st.write(f"- {screenshot.name}")
+        
+        if uploaded_files:
+            st.write(f"📄 {len(uploaded_files)} document(s) uploaded")
+            for file in uploaded_files:
+                st.write(f"- {file.name}")
     
-    if uploaded_file is not None:
-        try:
-            # Check file type and process accordingly
-            if uploaded_file.name.endswith('.zip'):
-                st.write("### 📦 Processing ZIP file...")
-                
-                # Show zip contents for debugging
-                with st.expander("📁 ZIP file contents (click to expand)"):
-                    zip_bytes = BytesIO(uploaded_file.getvalue())
-                    with zipfile.ZipFile(zip_bytes, 'r') as zip_ref:
-                        all_files = zip_ref.namelist()
-                        pipeline_files = [f for f in all_files if 'pipeline' in f.lower()]
-                        json_files = [f for f in all_files if f.endswith('.json')]
-                        
-                        st.write("**All files in ZIP:**")
-                        for file in all_files[:15]:  # Show first 15 files
-                            st.write(f"- {file}")
-                        if len(all_files) > 15:
-                            st.write(f"... and {len(all_files) - 15} more files")
-                        
-                        st.write("**Pipeline-related files:**")
-                        for file in pipeline_files:
-                            st.write(f"- {file}")
-                        
-                        st.write("**JSON files:**")
-                        for file in json_files[:10]:
-                            st.write(f"- {file}")
-                        if len(json_files) > 10:
-                            st.write(f"... and {len(json_files) - 10} more JSON files")
-                
-                pipeline_data = processor.process_zip_file(uploaded_file)
-                
-                if pipeline_data:
-                    st.write(f"### 📊 Extracted {len(pipeline_data)} activities from ZIP file")
-                    
-                    # Summary statistics
-                    successful_activities = [a for a in pipeline_data if 'error' not in a]
-                    error_activities = [a for a in pipeline_data if 'error' in a]
-                    
-                    col1, col2, col3 = st.columns(3)
-                    with col1:
-                        st.metric("✅ Successful", len(successful_activities))
-                    with col2:
-                        st.metric("❌ Errors", len(error_activities))
-                    with col3:
-                        st.metric("📁 Total", len(pipeline_data))
-                    
-                    # Group by folder for better organization
-                    folders = {}
-                    for activity in pipeline_data:
-                        folder = activity.get('source_folder', 'root')
-                        if folder not in folders:
-                            folders[folder] = []
-                        folders[folder].append(activity)
-                    
-                    # Display by folder
-                    for folder, activities in folders.items():
-                        if folder:
-                            st.write(f"#### 📂 Folder: `{folder}`")
-                        
-                        for i, activity in enumerate(activities):
-                            if 'error' in activity:
-                                with st.expander(f"❌ Error in {activity.get('source_file', 'Unknown file')}", expanded=False):
-                                    st.error(f"**File:** {activity.get('source_file', 'Unknown')}")
-                                    st.error(f"**Error:** {activity['error']}")
-                            else:
-                                with st.expander(f"📄 {activity['source_file']} - {activity['activity_name']}", expanded=False):
-                                    st.write(f"**Pipeline:** `{activity.get('pipeline_name', 'Unknown')}`")
-                                    st.write(f"**Activity Type:** `{activity['activity_type']}`")
-                                    
-                                    col1, col2 = st.columns(2)
-                                    
-                                    with col1:
-                                        st.write("**📥 Source:**")
-                                        st.write(f"- **Name:** `{activity['source_name']}`")
-                                        st.write(f"- **Type:** **{activity['source_type']}**")
-                                    
-                                    with col2:
-                                        st.write("**📤 Sink:**")
-                                        st.write(f"- **Name:** `{activity['sink_name']}`")
-                                        st.write(f"- **Type:** **{activity['sink_type']}**")
-                                    
-                                    if activity.get('depends_on'):
-                                        st.write(f"**Dependencies:** {', '.join(activity['depends_on'])}")
-                    
-                    # Download results as JSON
-                    if st.button("📥 Download Results as JSON"):
-                        results_json = json.dumps(pipeline_data, indent=2)
-                        st.download_button(
-                            label="Download JSON",
-                            data=results_json,
-                            file_name="pipeline_analysis_results.json",
-                            mime="application/json"
-                        )
-                        
-                else:
-                    st.warning("⚠️ No pipeline data found in ZIP file")
-                    
-            elif uploaded_file.name.endswith('.json'):
-                st.write("### 📄 Processing single JSON file...")
-                json_content = json.loads(uploaded_file.getvalue().decode("utf-8"))
-                pipeline_data = processor.extract_pipeline_data(json_content)
-                
-                st.write("### 📊 Extracted Pipeline Information:")
-                
-                for i, activity in enumerate(pipeline_data):
-                    if 'error' in activity:
-                        st.error(f"❌ Activity {i+1}: {activity['error']}")
-                    else:
-                        with st.expander(f"📋 Activity {i+1}: {activity['activity_name']}", expanded=True):
-                            st.write(f"**Activity Type:** `{activity['activity_type']}`")
-                            
-                            col1, col2 = st.columns(2)
-                            
-                            with col1:
-                                st.write("**📥 Source:**")
-                                st.write(f"- **Name:** `{activity['source_name']}`")
-                                st.write(f"- **Type:** **{activity['source_type']}**")
-                            
-                            with col2:
-                                st.write("**📤 Sink:**")
-                                st.write(f"- **Name:** `{activity['sink_name']}`")
-                                st.write(f"- **Type:** **{activity['sink_type']}**")
-                            
-                            if activity.get('depends_on'):
-                                st.write(f"**Dependencies:** {', '.join(activity['depends_on'])}")
+    # Main content area
+    if uploaded_files:
+        col1, col2 = st.columns([3, 1])
+        
+        with col2:
+            process_button = st.button("🚀 Process Documents", type="primary", use_container_width=True)
+        
+        if process_button:
+            st.session_state.processing_complete = False
+            st.session_state.doc_path = None
             
-            # Legacy document processing for other file types
-            elif uploaded_file.type == "application/pdf":
-                st.write("### 📄 Processing PDF file...")
-                result = processor.process_document(uploaded_file)
-                st.write("Processing complete!")
-                st.json(result)
+            # Step 1: Process uploaded files
+            st.subheader("📂 File Processing")
+            extracted_data = process_uploaded_files(uploaded_files)
+            
+            if extracted_data:
+                st.success(f"Successfully extracted content from {len(extracted_data)} files")
                 
-            elif uploaded_file.type in ["application/vnd.openxmlformats-officedocument.wordprocessingml.document"]:
-                st.write("### 📄 Processing DOCX file...")
-                result = processor.process_document(uploaded_file)
-                st.write("Processing complete!")
-                st.json(result)
+                # Display extracted files summary
+                with st.expander("📋 Extracted Files Summary"):
+                    df = pd.DataFrame([
+                        {
+                            'Filename': data['filename'],
+                            'Source': data['source'],
+                            'Content Length': len(data['content'])
+                        }
+                        for data in extracted_data
+                    ])
+                    st.dataframe(df, use_container_width=True)
                 
-            elif uploaded_file.type == "text/plain":
-                st.write("### 📄 Processing TXT file...")
-                result = processor.process_document(uploaded_file)
-                st.write("Processing complete!")
-                st.json(result)
+                # Step 2: Analyze with LLM
+                analysis_results = analyze_with_llm(extracted_data)
                 
+                if analysis_results:
+                    # Display analysis summary
+                    with st.expander("🔍 AI Analysis Results"):
+                        for result in analysis_results:
+                            st.write(f"**{result['filename']}**")
+                            st.write(result['analysis'])
+                            st.divider()
+                    
+                    # Step 3: Generate documentation
+                    doc_path = generate_documentation(analysis_results, uploaded_screenshots)
+                    
+                    if doc_path:
+                        st.balloons()
             else:
-                st.error("❌ Unsupported file type. Please upload a ZIP, JSON, PDF, DOCX, or TXT file.")
-                
+                st.error("No valid content could be extracted from the uploaded files.")
+    
+    # Download section
+    if st.session_state.processing_complete and st.session_state.doc_path:
+        st.subheader("⬇️ Download Generated Documentation")
+        
+        try:
+            with open(st.session_state.doc_path, 'rb') as file:
+                st.download_button(
+                    label="📄 Download Azure Synapse Pipeline Documentation",
+                    data=file.read(),
+                    file_name="Azure_Synapse_Pipeline_Documentation.docx",
+                    mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                    use_container_width=True
+                )
         except Exception as e:
-            st.error(f"❌ Error processing file: {e}")
-            st.error("Please make sure your file is valid and properly formatted.")
+            st.error(f"Error preparing download: {str(e)}")
+    
+    # Instructions section
+    if not uploaded_files:
+        st.markdown("## 🚀 Getting Started")
+        st.markdown("""
+        1. **Upload your files** using the sidebar file uploader
+        2. **Supported formats**: ZIP files, Word documents (.docx, .doc), PDF, Excel files, CSV, and text files
+        3. **Click 'Process Documents'** to start the AI analysis
+        4. **Download** your generated Azure Synapse Pipeline documentation
+        
+        ### 📋 What this tool does:
+        - Extracts content from your uploaded documents
+        - Uses advanced Qwen AI model to analyze pipeline information
+        - Generates professional Azure Synapse Pipeline documentation
+        - Outputs a properly formatted Word document following Azure standards
+        """)
+        
+        st.markdown("### 📄 Example Files")
+        st.markdown("""
+        Upload zip files containing:
+        - Pipeline configuration files
+        - Data flow documentation
+        - Source and sink specifications
+        - Business rules and transformation logic
+        """)
 
 if __name__ == "__main__":
     main()
