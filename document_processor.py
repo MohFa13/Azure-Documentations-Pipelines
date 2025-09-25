@@ -229,21 +229,15 @@ class DocumentProcessor:
             return []
 
 
-import difflib
+from docx import Document
 
-def fix_reference_names(pipeline_json, available_names):
-    """Fixes input/output reference names based on closest available source/sink names."""
-    def closest(name):
-        matches = difflib.get_close_matches(name, available_names, n=1, cutoff=0.4)
-        return matches[0] if matches else name
-
-    for activity in pipeline_json.get("properties", {}).get("activities", []):
-        # Fix inputs
-        for inp in activity.get("inputs", []):
-            if "referenceName" in inp:
-                inp["referenceName"] = closest(inp["referenceName"])
-        # Fix outputs
-        for out in activity.get("outputs", []):
-            if "referenceName" in out:
-                out["referenceName"] = closest(out["referenceName"])
-    return pipeline_json
+def extract_sources_from_docx(docx_path):
+    """Extract source/sink names from Section 2 table in the documentation."""
+    doc = Document(docx_path)
+    names = []
+    for table in doc.tables:
+        for row in table.rows:
+            cells = [c.text.strip() for c in row.cells]
+            if cells and cells[0] and cells[0] not in ("Source/Sink Name", "Database", "Data Warehouse"):
+                names.append(cells[0])
+    return list(set(names))

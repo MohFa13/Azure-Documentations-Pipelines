@@ -1,3 +1,5 @@
+from document_processor import fix_reference_names, extract_sources_from_docx
+
 import streamlit as st
 import os
 import tempfile
