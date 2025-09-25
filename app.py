@@ -82,11 +82,16 @@ def parse_zip(zip_bytes, screenshots=None):
     doc = Document()
     doc.add_heading("Pipelines Documentation", 0).alignment = WD_PARAGRAPH_ALIGNMENT.CENTER
 
+    pipeline_names = []
+
     for pf in pipeline_jsons:
         with open(pf, 'r', encoding='utf-8') as f:
             pj = json.load(f)
+        pipeline_name = pj.get("name")
+        pipeline_names.append(pipeline_name)
+
         acts = pj.get("properties", {}).get("activities", [])
-        doc.add_heading(f"Pipeline: {pj.get('name')}", level=1)
+        doc.add_heading(f"Pipeline: {pipeline_name}", level=1)
         doc.add_paragraph(f"Last Publish Time: {pj.get('properties',{}).get('lastPublishTime','')}")
 
         doc.add_heading("Sources and Sinks", level=2)
@@ -151,10 +156,16 @@ def parse_zip(zip_bytes, screenshots=None):
             for img in screenshots:
                 doc.add_picture(img, width=None)
 
-    output_path = f"{pj.get('name')}.docx"
-    doc.save(output_path)
-    return output_path
+    # Decide the filename dynamically
+    if pipeline_names:
+        output_filename = f"{pipeline_names[0]}_documentation.docx"
+    else:
+        output_filename = "Pipelines_Documentation.docx"
 
+    doc.save(output_filename)
+    return output_filename
+
+# ---------------- Streamlit App ----------------
 st.title("Pipeline Documentation Generator")
 
 uploaded = st.file_uploader("Upload your ZIP file (with pipeline/dataflow/dataset JSONs)", type=["zip"])
@@ -177,4 +188,4 @@ if uploaded:
     if st.button("Generate Documentation"):
         path = parse_zip(uploaded.read(), screenshots)
         with open(path,"rb") as f:
-            st.download_button("Download DOCX", f, file_name="pipline_doc.docx")
+            st.download_button("Download DOCX", f, file_name=os.path.basename(path))
