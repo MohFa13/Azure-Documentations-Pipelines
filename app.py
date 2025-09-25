@@ -151,7 +151,7 @@ def parse_zip(zip_bytes, screenshots=None):
             for img in screenshots:
                 doc.add_picture(img, width=None)
 
-    output_path = "pipelines_doc.docx"
+    output_path = f"{pj.get('name')}.docx"
     doc.save(output_path)
     return output_path
 
