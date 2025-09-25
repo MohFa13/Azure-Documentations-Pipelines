@@ -8,6 +8,8 @@ import PyPDF2
 # import magic  # Optional dependency, will use file extension fallback
 import chardet
 import json
+import re
+from difflib import get_close_matches
 
 class DocumentProcessor:
     """Handles extraction and processing of various document formats"""
@@ -103,7 +105,81 @@ class DocumentProcessor:
         except Exception as e:
             print(f"Error reading PDF file: {str(e)}")
             return None
-    
+
+    def extract_pipeline_data(self, json_content):
+    """Extract pipeline data from Azure Data Factory JSON"""
+    try:
+        # Parse JSON if it's a string
+        if isinstance(json_content, str):
+            pipeline_data = json.loads(json_content)
+        else:
+            pipeline_data = json_content
+        
+        # Database mapping from your image
+        db_mapping = {
+            'agilist_datalab_test': 'Oracle',
+            'AGILIST': 'Oracle', 
+            'AGILIST_DATALAB': 'Oracle',
+            'AGILIST_DELV': 'Oracle',
+            'AGLPRD': 'Oracle',
+            'AGLPRD_IM_ATM': 'Oracle',
+            'AGLPRDDELV': 'Oracle',
+            'AGLPRDIMSTAGE': 'Oracle',
+            'AzureDataLakeStorage1': 'Azure Data Lake Storage Gen2',
+            'BOXI': 'Oracle',
+            'Dataprd': 'SQL Server',
+            'prdpi': 'Oracle',
+            'ResusApp': 'SQL Server',
+            'SHDSQLPRD11': 'SQL Server'
+        }
+        
+        activities = pipeline_data.get('properties', {}).get('activities', [])
+        extracted_data = []
+        
+        for activity in activities:
+            activity_info = {
+                'activity_name': activity.get('name', ''),
+                'activity_type': activity.get('type', ''),
+                'source_name': '',
+                'source_type': '',
+                'sink_name': '',
+                'sink_type': ''
+            }
+            
+            # Extract source information
+            if 'inputs' in activity and activity['inputs']:
+                source_ref = activity['inputs'][0].get('referenceName', '')
+                activity_info['source_name'] = source_ref
+                activity_info['source_type'] = self._map_to_database_type(source_ref, db_mapping)
+            
+            # Extract sink information  
+            if 'outputs' in activity and activity['outputs']:
+                sink_ref = activity['outputs'][0].get('referenceName', '')
+                activity_info['sink_name'] = sink_ref
+                activity_info['sink_type'] = self._map_to_database_type(sink_ref, db_mapping)
+            
+            extracted_data.append(activity_info)
+        
+        return extracted_data
+        
+    except Exception as e:
+        return [{'error': f'Error processing pipeline: {str(e)}'}]
+
+    def _map_to_database_type(self, reference_name, db_mapping):
+        """Map reference name to database type using fuzzy matching"""
+        if not reference_name:
+            return 'Unknown'
+        
+        # Direct match
+        if reference_name in db_mapping:
+            return db_mapping[reference_name]
+        
+        # Fuzzy match
+        closest_matches = get_close_matches(reference_name, db_mapping.keys(), n=1, cutoff=0.6)
+        if closest_matches:
+            return db_mapping[closest_matches[0]]
+        
+        return 'Unknown'
     def _extract_from_excel(self, file_path):
         """Extract content from Excel files"""
         try:
